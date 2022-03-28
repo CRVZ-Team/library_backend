@@ -16,7 +16,7 @@ load_dotenv()
 
 Base = declarative_base()
 
-engine = create_engine('mysql://ofutjb17rq2pjfgu:ev7q5q6uee55p1uu@spryrr1myu6oalwl.chr7pe7iynqr.eu-west-1.rds.amazonaws.com:3306/pqbzhf5qjts9on9i')
+engine = create_engine(os.getenv("DATABASE_URL"))
 create_session = sessionmaker(bind=engine)
 
 plugin = sqlalchemy.Plugin(
