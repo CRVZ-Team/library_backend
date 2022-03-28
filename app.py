@@ -59,8 +59,11 @@ def index():
 @route('/api/login', method=['OPTIONS', 'POST'])
 def _():
     try:
-        email = request.forms.get('email')
-        password = request.forms.get('password')
+        payload = json.loads(request.body.read())
+        email = payload['email']
+        print(email)
+        password = payload['password']
+        print(password)
         session = create_session()
         user = session.query(User).filter_by(email=email).first()
         print(user)
@@ -115,7 +118,8 @@ def _():
 
 @route('/api/verify-email', method=['OPTIONS', 'PUT'])
 def _():
-    verificationString = request.forms.get('verificationString')
+    payload = json.loads(request.body.read())
+    verificationString = payload['verificationString']
     session = create_session()
     user = session.query(User).filter_by(verification_string=verificationString).first()
     
@@ -138,7 +142,8 @@ def _():
 @route('/api/users/<passwordResetCode>/reset-password', method=['OPTIONS', 'PUT'])
 def _(passwordResetCode):
     try:
-        newPassword = request.forms.get('newPassword')
+        payload = json.loads(request.body.read())
+        newPassword = payload['newPassword']
         session = create_session()
         user = session.query(User).filter_by(password_reset_code=passwordResetCode).first()
         if not user:
