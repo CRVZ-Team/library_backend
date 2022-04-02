@@ -2,6 +2,7 @@ import os
 import jwt
 import json
 import bcrypt
+import decimal
 from uuid import uuid4
 from utilities import *
 from bottle.ext import sqlalchemy
@@ -10,7 +11,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from bottle import get, install, post, put, route, run, template, request, response, static_file, redirect
 
-from db import User
+from db import User, Book, Subscription, BookGenre, UserBook, Review, Coeficient
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -30,6 +31,11 @@ plugin = sqlalchemy.Plugin(
 )
 
 install(plugin)
+
+def default_json(t):
+    if type(t) == decimal.Decimal:
+        return "{:.2f}".format(t)
+    return f'{t}'
 
 class EnableCors(object):
     name = 'enable_cors'
@@ -137,7 +143,7 @@ def _():
         response.status = 500
         return response
     response.status = 200
-    return {'token': token}
+    return response
 
 @route('/api/users/<passwordResetCode>/reset-password', method=['OPTIONS', 'PUT'])
 def _(passwordResetCode):
@@ -178,6 +184,105 @@ def _(email):
     except Exception as e:
         response.status = 500
         return response
+
+
+@route('/api/users/<id>', method=['OPTIONS', 'GET'])
+
+
+@route('/api/book/<id>', method=['OPTIONS', 'GET'])
+def _(id):
+    session = create_session()
+    book = session.query(Book).filter_by(id=id).first()
+    if not book:
+        response.status = 404
+        return response
+    # get reviews for the book
+    reviews = session.query(Review).filter_by(book_id=id).all()
+    # get coeficient for the book price
+    coeficient = session.query(Coeficient).first()
+    subscriptions = {"month": book.price * coeficient.month, "year": book.price * coeficient.year}
+    data = {'book': book.to_dict(), 'subscriptions': subscriptions, 'reviews': [review.to_dict() for review in reviews]}
+    session.close()
+    response.status = 200
+    return json.dumps(data, default=default_json)
+
+
+@route('/api/books', method=['OPTIONS', 'GET'])
+def _():
+    session = create_session()
+    books = session.query(Book).all()
+    response.status = 200
+    return [book.to_dict() for book in books]
+
+
+# FEATURE for ADMIN (add book)
+@route('/api/books', method=['OPTIONS', 'POST'])
+def _():
+    try:
+        payload = json.loads(request.body.read())
+        title = payload['title']
+        author = payload['author']
+        description = payload['description']
+        image_url = payload['image_url']
+        session = create_session()
+        book = Book(title, author, description, image_url)
+        session.add(book)
+        session.commit()
+        response.status = 201
+        return response
+    except Exception as e:
+        response.status = 500
+        return {'message': 'Error creating book'}
+
+# FEATURE for ADMIN (delete book)
+@route('/api/book/<id>', method=['OPTIONS', 'DELETE'])
+def _(id):
+    session = create_session()
+    book = session.query(Book).filter_by(id=id).first()
+    if not book:
+        response.status = 404
+        return response
+    session.delete(book)
+    session.commit()
+    response.status = 200
+    return response
+
+@route('/api/book/<id>', method=['OPTIONS', 'PUT'])
+def _(id):
+    try:
+        payload = json.loads(request.body.read())
+        title = payload['title']
+        author = payload['author']
+        description = payload['description']
+        image_url = payload['image_url']
+        session = create_session()
+        book = session.query(Book).filter_by(id=id).first()
+        if not book:
+            response.status = 404
+            return response
+        book.title = title
+        book.author = author
+        book.description = description
+        book.image_url = image_url
+        session.commit()
+        response.status = 200
+        return response
+    except Exception as e:
+        response.status = 500
+        return {'message': 'Error updating book'}
+
+@route('/api/users/<id>', method=['OPTIONS', 'GET'])
+def _(id):
+    session = create_session()
+    user = session.query(User).filter_by(id=id).first()
+    if not user:
+        response.status = 404
+        return response
+    response.status = 200
+    return user.to_dict()
+
+
+    
 
 if os.environ.get('APP_LOCATION') == 'heroku':
     run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
