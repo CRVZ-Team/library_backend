@@ -40,16 +40,18 @@ class Book(Base):
     year = Column(Integer)
     price = Column(Float(9,2))
     description = Column(String(1000))
+    pages = Column(Integer)
     avg_rating = Column(Float(2,1))
     quantity = Column(Integer)
 
-    def __init__(self, image_url, title, author, year, price, description, avg_rating, quantity):
+    def __init__(self, image_url, title, author, year, price, description, pages, avg_rating, quantity):
         self.image_url = image_url
         self.title = title
         self.author = author
         self.year = year
         self.price = price
         self.description = description
+        self.pages = pages
         self.avg_rating = avg_rating
         self.quantity = quantity
 
@@ -75,16 +77,14 @@ class Review(Base):
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey('users.id'))
     book_id = Column(Integer, ForeignKey('books.id'))
-    title = Column(String(20))
     comment = Column(String(500))
     rating = Column(Integer)
     approved = Column(Boolean)
     
 
-    def __init__(self, user_id, book_id, title, comment, rating, approved):
+    def __init__(self, user_id, book_id, comment, rating, approved):
         self.user_id = user_id
         self.book_id = book_id
-        self.title = title
         self.comment = comment
         self.rating = rating
         self.approved = approved
