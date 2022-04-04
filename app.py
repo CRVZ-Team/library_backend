@@ -1,3 +1,4 @@
+import functools
 import os
 import jwt
 import json
@@ -6,12 +7,12 @@ import decimal
 from uuid import uuid4
 from utilities import *
 from bottle.ext import sqlalchemy
-from sqlalchemy import create_engine, Column, Integer, String, DateTime
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from bottle import get, install, post, put, route, run, template, request, response, static_file, redirect
 
-from db import User, Book, Subscription, BookGenre, UserBook, Review, Coeficient
+from db import User, Book, Subscription, BookGenre, UserBook, Review, Coeficient, Genre
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -196,12 +197,16 @@ def _(id):
     if not book:
         response.status = 404
         return response
+    # get genres for the book\
+    genre_ids = session.query(Genre).join(BookGenre).filter_by(book_id=id).all()
+    genres = ", ".join([genre.type for genre in genre_ids])
     # get reviews for the book
-    reviews = session.query(Review).filter_by(book_id=id).all()
+    reviews_query = session.query(Review, User.email).filter(Review.user_id == User.id).filter(Review.book_id==id).filter(Review.approved == True).all()
+    reviews	= [{'comment': review[0].to_dict(), 'user': review[1]} for review in reviews_query]
     # get coeficient for the book price
     coeficient = session.query(Coeficient).first()
     subscriptions = {"month": book.price * coeficient.month, "year": book.price * coeficient.year}
-    data = {'book': book.to_dict(), 'subscriptions': subscriptions, 'reviews': [review.to_dict() for review in reviews]}
+    data = {'book': book.to_dict(), 'genres': genres, 'subscriptions': subscriptions, 'reviews': reviews}
     session.close()
     response.status = 200
     return json.dumps(data, default=default_json)
@@ -281,6 +286,44 @@ def _(id):
     response.status = 200
     return user.to_dict()
 
+
+@route('/api/comment', method=['OPTIONS', 'POST'])
+def _():
+    session = create_session()
+    payload = json.loads(request.body.read())
+    rating = payload['rating']
+    comment = payload['comment']
+    book_id = payload['book_id']
+    user_id = payload['user_id']
+    review = Review(book_id=book_id, user_id=user_id, comment=comment, rating=rating, approved=False)
+    session.add(review)
+    session.commit()
+    response.status = 201
+    return response
+    session.close()
+
+@route('/api/filters/authors', method=['OPTIONS', 'GET'])
+def _():
+    session = create_session()
+
+    #query authors
+    authors_data = session.query(Book).all()
+    authors = [{'name': book.author} for book in authors_data]
+
+    #query year span
+    max_year = session.query(func.max(Book.year)).first()[0]
+    min_year = session.query(func.min(Book.year)).first()[0]
+
+    year_span = [{"max": max_year, "min": min_year}]
+
+    #query genres
+    genres_data = session.query(Genre).all()
+    genres = [{'name': genre.type} for genre in genres_data]
+
+    #create general dict
+    data =  [{"authors": authors}, {"year_span": year_span}, {"genres": genres}]
+    response.status = 200
+    return json.dumps(data, default=default_json)
 
     
 
