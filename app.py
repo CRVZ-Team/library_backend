@@ -331,6 +331,7 @@ def _():
     #create general dict
     data =  [{"authors": authors}, {"year_span": year_span}, {"genres": genres}]
     response.status = 200
+    session.close()
     return json.dumps(data, default=default_json)
 
 
