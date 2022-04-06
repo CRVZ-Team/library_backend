@@ -6,7 +6,7 @@ import decimal
 from uuid import uuid4
 from utilities import *
 from bottle.ext import sqlalchemy
-from sqlalchemy import create_engine, Column, Integer, String, DateTime
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from bottle import get, install, post, put, route, run, template, request, response, static_file, redirect
@@ -210,13 +210,15 @@ def _(id):
     response.status = 200
     return json.dumps(data, default=default_json)
 
-
+# Route for getting the books
 @route('/api/books', method=['OPTIONS', 'GET'])
 def _():
     session = create_session()
     books = session.query(Book).all()
+    print(books)
+    session.close()
     response.status = 200
-    return [book.to_dict() for book in books]
+    return json.dumps([book.to_dict() for book in books], default=default_json)
 
 
 # FEATURE for ADMIN (add book)
@@ -286,22 +288,51 @@ def _(id):
     return user.to_dict()
 
 
+# Route 
 @route('/api/comment', method=['OPTIONS', 'POST'])
 def _():
-    session = create_session()
-    payload = json.loads(request.body.read())
-    rating = payload['rating']
-    comment = payload['comment']
-    book_id = payload['book_id']
-    user_id = payload['user_id']
-    review = Review(book_id=book_id, user_id=user_id, comment=comment, rating=rating, approved=False)
-    session.add(review)
-    session.commit()
-    response.status = 201
-    return response
-    session.close()
+    try:
+        session = create_session()
+        payload = json.loads(request.body.read())
+        rating = payload['rating']
+        comment = payload['comment']
+        book_id = payload['book_id']
+        user_id = payload['user_id']
+        review = Review(book_id=book_id, user_id=user_id, comment=comment, rating=rating, approved=False)
+        session.add(review)
+        session.commit()
+        response.status = 201
+        return response
+    except Exception as e:
+        response.status = 500
+        return response
+    finally:
+        session.close()
 
     
+@route('/api/filters/authors', method=['OPTIONS', 'GET'])
+def _():
+    session = create_session()
+
+    #query authors
+    authors_data = session.query(Book).all()
+    authors = [{'name': book.author} for book in authors_data]
+
+    #query year span
+    max_year = session.query(func.max(Book.year)).first()[0]
+    min_year = session.query(func.min(Book.year)).first()[0]
+
+    year_span = [{"max": max_year, "min": min_year}]
+
+    #query genres
+    genres_data = session.query(Genre).all()
+    genres = [{'name': genre.type} for genre in genres_data]
+
+    #create general dict
+    data =  [{"authors": authors}, {"year_span": year_span}, {"genres": genres}]
+    response.status = 200
+    return json.dumps(data, default=default_json)
+
 
 if os.environ.get('APP_LOCATION') == 'heroku':
     run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
