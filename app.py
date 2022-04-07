@@ -1,4 +1,5 @@
 import os
+from typing import final
 import jwt
 import json
 import bcrypt
@@ -219,7 +220,7 @@ def _(email):
 
 
 # Single book page
-@route('/api/books/<id>', method=['OPTIONS', 'GET'])
+@route('/api/book/<id>', method=['OPTIONS', 'GET'])
 def _(id):
     try:
         session = create_session()
@@ -344,7 +345,7 @@ def _(id):
     return user.to_dict()
 
 
-# Reviews and omments for the book
+# Reviews and comments for the book
 @route('/api/comment', method=['OPTIONS', 'POST'])
 def _():
     try:
@@ -362,6 +363,7 @@ def _():
         response.status = 201
         return response
     except Exception as e:
+        print(e)
         response.status = 500
         return response
     finally:
@@ -398,6 +400,54 @@ def _():
     finally:
         session.close()
 
+
+@route ('/api/filter/books', method=['OPTIONS', 'POST'])
+def _():
+    try:
+        session = create_session()
+        payload = json.loads(request.body.read())
+        authors = payload['authors']
+        years = payload['years']
+        genres = payload['genres']
+
+        print(authors, years, genres)
+       
+
+        #query books
+        if len(genres) != 0:
+            books_ids = session.query(BookGenre.book_id).join(Genre).filter(Genre.type.in_(genres)).all()
+            books_ids = [book[0] for book in books_ids]
+        else:
+            books_ids = []
+        
+        books_data = [] 
+        print(books_ids)
+
+        if len(authors) != 0 and len(years) != 0 and len(books_ids) != 0:
+            books_data = session.query(Book).filter(Book.author.in_(authors)).filter(Book.year.in_(years)).filter(Book.id.in_(books_ids)).all()
+        elif len(authors) != 0 and len(years) != 0:
+            books_data = session.query(Book).filter(Book.author.in_(authors)).filter(Book.year.in_(years)).all()
+        elif len(authors) != 0 and len(books_ids) != 0:
+            books_data = session.query(Book).filter(Book.author.in_(authors)).filter(Book.id.in_(books_ids)).all()
+        elif len(years) != 0 and len(books_ids) != 0:
+            books_data = session.query(Book).filter(Book.year.in_(years)).filter(Book.id.in_(books_ids)).all()
+        elif len(authors) != 0:
+            books_data = session.query(Book).filter(Book.author.in_(authors)).all()
+        elif len(years) != 0:
+            books_data = session.query(Book).filter(Book.year.in_(years)).all()
+        elif len(books_ids) != 0:
+            books_data = session.query(Book).filter(Book.id.in_(books_ids)).all()
+        else:
+            books_data = session.query(Book).all()
+
+        return json.dumps([book.to_dict() for book in books_data], default=default_json)
+    except Exception as e:
+        print(e)
+        response.status = 500
+        return response
+    finally:
+        session.close()
+        
 if os.environ.get('APP_LOCATION') == 'heroku':
     run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
 else:
