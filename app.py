@@ -1,3 +1,4 @@
+from asyncio import protocols
 import os
 import jwt
 import json
@@ -215,7 +216,7 @@ def _(id):
 def _():
     session = create_session()
     books = session.query(Book).all()
-    print(books)
+    #print(books)
     session.close()
     response.status = 200
     return json.dumps([book.to_dict() for book in books], default=default_json)
@@ -319,17 +320,29 @@ def _():
     authors = [{'name': book.author} for book in authors_data]
 
     #query year span
-    max_year = session.query(func.max(Book.year)).first()[0]
-    min_year = session.query(func.min(Book.year)).first()[0]
+    # max_year = session.query(func.max(Book.year)).first()[0]
+    # min_year = session.query(func.min(Book.year)).first()[0]
 
-    year_span = [{"max": max_year, "min": min_year}]
+    # year_span = [{"max": max_year, "min": min_year}]
+    years = []
+    years_data = session.query(Book).all()
+    for book in years_data:
+        if book.year not in years:
+            years.append(book.year)
+
+
+    years.sort()
+        
+    print(years)
 
     #query genres
     genres_data = session.query(Genre).all()
     genres = [{'name': genre.type} for genre in genres_data]
 
+
+
     #create general dict
-    data =  [{"authors": authors}, {"year_span": year_span}, {"genres": genres}]
+    data =  [{"authors": authors}, {"year_span":years}, {"genres": genres}]
     response.status = 200
     session.close()
     return json.dumps(data, default=default_json)
