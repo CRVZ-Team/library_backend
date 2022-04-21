@@ -1,10 +1,13 @@
 from asyncio import protocols
 import os
 from typing import final
+from xmlrpc.client import Boolean
 import jwt
 import json
 import bcrypt
 import decimal
+import unittest
+from boddle import boddle
 from uuid import uuid4
 from utilities import *
 from bottle.ext import sqlalchemy
@@ -13,7 +16,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from bottle import get, install, post, put, route, run, template, request, response, static_file, redirect
 
-from db import User, Book, Subscription, BookGenre, UserBook, Review, Coeficient, Genre
+from db import User, Book, Subscription, BookGenre, UserBook, Review, Coeficient, Genre, Invoice, InvoiceBook
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -64,17 +67,17 @@ secret = os.environ.get('JWT_SECRET')
 
 @get('/')
 def index():
-    return 
+    return "Hello"
 
 # LOGIN
 @route('/api/login', method=['OPTIONS', 'POST'])
-def _():
+def login():
     try:
+        session = create_session()
         payload = json.loads(request.body.read())
         email = payload['email']
         password = payload['password']
 
-        session = create_session()
         user = session.query(User).filter_by(email=email).first()
 
         if not user:
@@ -101,7 +104,7 @@ def _():
 
 # Sign up
 @route('/api/signup', method=['OPTIONS', 'POST'])
-def _():
+def signup():
     try:
         payload = json.loads(request.body.read())
         email = payload['email']
@@ -157,7 +160,7 @@ def _():
             return response
 
         response.status = 200
-        return response
+        return {'token': token}
     except Exception as e:
         response.status = 500
         return response
@@ -222,7 +225,7 @@ def _(email):
 
 # Single book page
 @route('/api/book/<id>', method=['OPTIONS', 'GET'])
-def _(id):
+def book(id):
     try:
         session = create_session()
         book = session.query(Book).filter_by(id=id).first()
@@ -255,7 +258,7 @@ def _(id):
 
 # Route for getting the books
 @route('/api/books', method=['OPTIONS', 'GET'])
-def _():
+def books():
     try:
         session = create_session()
         books = session.query(Book).all()
@@ -348,7 +351,7 @@ def _(id):
 
 # Reviews and comments for the book
 @route('/api/comment', method=['OPTIONS', 'POST'])
-def _():
+def rewiew():
     try:
         session = create_session()
         payload = json.loads(request.body.read())
@@ -362,7 +365,7 @@ def _():
         session.commit()
 
         response.status = 201
-        return response
+        return "success"
     except Exception as e:
         print(e)
         response.status = 500
@@ -373,7 +376,7 @@ def _():
     
 # Filters for the books
 @route('/api/filters/authors', method=['OPTIONS', 'GET'])
-def _():
+def filters():
     try:
         session = create_session()
 
@@ -402,7 +405,7 @@ def _():
         genres = [{'name': genre.type} for genre in genres_data]
 
         #create general dict
-        data =  [{"authors": authors}, {"year_span": year_span}, {"genres": genres}]
+        data =  [{"authors": authors}, {"year_span": years}, {"genres": genres}]
         response.status = 200
         return json.dumps(data, default=default_json)
     except Exception as e:
@@ -413,7 +416,7 @@ def _():
 
 
 @route ('/api/filter/books', method=['OPTIONS', 'POST'])
-def _():
+def filter_books():
     try:
         session = create_session()
         payload = json.loads(request.body.read())
@@ -457,8 +460,40 @@ def _():
         return response
     finally:
         session.close()
+
+
+# Handle payment
+@route('/api/invoice', method=['OPTIONS', 'POST'])
+def invoice():
+    try:
+        session = create_session()
+        payload = json.loads(request.body.read())
+        user_id = payload['user_id']
+        date = payload['date']
+        total_price = payload['total_price']
+        books = payload['books']
+        invoice = Invoice(user_id=user_id, date=date, total_price=total_price)
+        invoice_book = []
+        user_book = []
+        # TRANSACTION
+        with session.begin() as session:
+            invoice_id = session.add(invoice)
+            for book in books:
+                user_book.append(UserBook(user_id=user_id, book_id=book['id'], subs_id=book['subs_id'], init_date=book['init_date'], exp_date=book['exp_date']))
+                invoice_book.append(InvoiceBook(book_id=book['id'], invoice_id=invoice_id))
+            session.add_all(invoice_book)
+            session.add_all(user_book)
+        response.status = 201
+        return "success"
+    except Exception as e:
+        print(e)
+        response.status = 500
+        return response
+    finally:
+        session.close()
         
 if os.environ.get('APP_LOCATION') == 'heroku':
     run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
 else:
     run(host='localhost', port=8080, debug=True, reloader=True, server='paste')
+
