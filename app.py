@@ -1,5 +1,6 @@
 from asyncio import protocols
 import os
+from subprocess import CREATE_NEW_CONSOLE
 from typing import final
 from xmlrpc.client import Boolean
 import jwt
@@ -499,7 +500,11 @@ def _(id):
         books = []
         books_data = session.query(UserBook).filter(UserBook.user_id == id).all()
         for book in books_data:
-            books.append(session.query(Book).filter(Book.id == book.book_id).first().to_dict())
+            bk = session.query(Book).filter(Book.id == book.book_id).first()
+            #taking exp_date and adding it to the book
+            exp_date = str(book.exp_date)
+            books.append(bk.to_dict())
+            books[-1]['exp_date'] = exp_date.split(' ')[0]
         response.status = 200
         return json.dumps(books, default=default_json)
     except Exception as e:
