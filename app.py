@@ -491,6 +491,23 @@ def invoice():
         return response
     finally:
         session.close()
+
+@route('/api/yourbooks/<id>', method=['OPTIONS', 'GET'])
+def _(id):
+    try:
+        session = create_session()
+        books = []
+        books_data = session.query(UserBook).filter(UserBook.user_id == id).all()
+        for book in books_data:
+            books.append(session.query(Book).filter(Book.id == book.book_id).first().to_dict())
+        response.status = 200
+        return json.dumps(books, default=default_json)
+    except Exception as e:
+        print(e)
+        response.status = 500
+        return response
+    finally:
+        session.close()
         
 if os.environ.get('APP_LOCATION') == 'heroku':
     run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
