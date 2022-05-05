@@ -1,8 +1,10 @@
+from contextlib import nullcontext
 import os
 import jwt
 import json
 import bcrypt
 import decimal
+from datetime import datetime, timedelta
 from uuid import uuid4
 from utilities import *
 from bottle.ext import sqlalchemy
@@ -129,7 +131,7 @@ def signup():
             session.add(user)
             session.commit()
 
-            send_email(email, verificationString, 'verify')
+            send_email(email, 'verify', verificationString=verificationString)
 
         # add more variables token
         token = jwt.encode({'id': user.id, 'email': user.email, 'verified': user.is_verified,
@@ -229,7 +231,7 @@ def _(email):
         user.password_reset_code = passwordResetCode
         session.commit()
 
-        send_email(email, passwordResetCode, 'reset')
+        send_email(email, 'reset', verificationString=passwordResetCode)
 
         response.status = 200
         return response
@@ -503,6 +505,8 @@ def filter_books():
         else:
             books_data = session.query(Book).all()
 
+        print(books_data)
+
         return json.dumps([book.to_dict() for book in books_data], default=default_json)
     except Exception as e:
         print(e)
@@ -518,8 +522,9 @@ def invoice():
     try:
         session = create_session()
         payload = json.loads(request.body.read())
-        user_id = payload['user_id']
-        date = payload['date']
+        user_id = int(payload['user_id'])
+        user_email = payload['user_email']
+        date = datetime.now()
         total_price = payload['total_price']
         books = payload['books']
 
@@ -535,14 +540,20 @@ def invoice():
             session.refresh(invoice)
 
             for book in books:
+                print(book)
+                if book['subs_id'] == 3:
+                    exp_date = None
+                else:
+                    exp_date = date + timedelta(days=int(book['exp_date']))
                 user_book.append(UserBook(
                     user_id=user_id, book_id=book['id'], subs_id=book['subs_id'], 
-                    init_date=book['init_date'], exp_date=book['exp_date']))
+                    init_date=date, exp_date=exp_date))
                 invoice_book.append(InvoiceBook(
                     book_id=book['id'], invoice_id=invoice.id))
 
             session.add_all(invoice_book)
             session.add_all(user_book)
+        send_email(user_email, 'invoice', invoice)
 
         response.status = 201
         return "success"

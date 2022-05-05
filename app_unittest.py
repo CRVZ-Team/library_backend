@@ -8,21 +8,22 @@ from boddle import boddle
 token_login = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpZCI6MSwiZW1haWwiOiJ0ZXN0IiwidmVyaWZpZWQiOnRydWUsImFkbWluIjp0cnVlfQ.ADtLcJ2cwnMyQRxI4gxQC-lJziEbMrcVia6OoFoYsKQ"
 token_signup = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpZCI6bnVsbCwiZW1haWwiOiJ0ZXN0MSIsInZlcmlmaWVkIjpmYWxzZSwiYWRtaW4iOmZhbHNlfQ.1Z6EZdfinbNy8eeXfObKAR0r_hlldtV82vowqjso8xE"
 
-# class TestLogin(unittest.TestCase):       
-#     def test_successfull_login(self):
-#         with boddle(body="{\"email\": \"test\", \"password\": \"test\"}"):
-#             self.assertEqual(app.login(), {'token': token_login})
+class TestLogin(unittest.TestCase):       
+    def test_successfull_login(self):
+        with boddle(body="{\"email\": \"test\", \"password\": \"test\"}"):
+            self.assertEqual(app.login(), {'token': token_login})
 
-#     def test_wrong_password(self):
-#         with boddle(body="{\"email\": \"test\", \"password\": \"test1\"}"):
-#             self.assertEqual(app.login(), {'error': 'Invalid credentials'})
+    def test_wrong_password(self):
+        with boddle(body="{\"email\": \"test\", \"password\": \"test1\"}"):
+            self.assertEqual(app.login(), {'error': 'Invalid credentials'})
         
-#     def test_wrong_email(self):
-#         with boddle(body="{\"email\": \"test1\", \"password\": \"test\"}"):
-#             self.assertEqual(app.login(), {'error': 'Invalid credentials'})	
+    def test_wrong_email(self):
+        with boddle(body="{\"email\": \"test1\", \"password\": \"test\"}"):
+            self.assertEqual(app.login(), {'error': 'Invalid credentials'})	
 
-#     def test_exception_login(self):
-#         with boddle(body="{\"password\": \"test\"}"):})
+    def test_exception_login(self):
+        with boddle(body="{\"password\": \"test\"}"):
+            self.assertEqual(app.login(), 'error')
 
 
 class TestGetBooks(unittest.TestCase):
@@ -59,9 +60,9 @@ class TestFilters(unittest.TestCase):
 
 
 class Test_Invoice(unittest.TestCase):
-    def test_invoice(self):
-        with boddle(body="{\"user_id\": 1, \"date\": \"2022-04-27\", \"total_price\": 1000, \"books\": [{\"id\": 1, \"subs_id\": 1, \"init_date\": \"2022-04-27\", \"exp_date\": \"2022-04-28\"}]}"):
-            self.assertEqual(app.invoice(), 'success')
+    # def test_invoice(self):
+    #     with boddle(body="{\"user_id\": 1, \"date\": \"2022-04-27\", \"total_price\": 1000, \"books\": [{\"id\": 1, \"subs_id\": 1, \"init_date\": \"2022-04-27\", \"exp_date\": \"2022-04-28\"}]}"):
+    #         self.assertEqual(app.invoice(), 'success')
 
     def test_invoice_wrong(self):
         self.assertEqual(app.invoice(), 'error')
