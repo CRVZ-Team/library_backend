@@ -1,5 +1,6 @@
 from contextlib import nullcontext
 import os
+from tabnanny import check
 import jwt
 import json
 import bcrypt
@@ -425,10 +426,19 @@ def review():
 def filters():
     try:
         session = create_session()
+        authors = []
+        check_up =[]
 
         # query authors
         authors_data = session.query(Book).all()
-        authors = [{'name': book.author} for book in authors_data]
+        #authors = [{'name': book.author} for book in authors_data]
+        for book in authors_data:
+            if book.author not in check_up:
+                check_up.append(book.author)
+                authors.append({"name": book.author})
+
+        #sort authors
+        authors = sorted(authors, key=lambda k: k['name'])
 
     # query year span
     # max_year = session.query(func.max(Book.year)).first()[0]
