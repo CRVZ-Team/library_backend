@@ -1,17 +1,30 @@
-# import unittest
+import os
 import app
+import jwt
 import json
 import unittest
 from boddle import boddle
+from datetime import datetime, timedelta
 
+secret = os.environ.get('JWT_SECRET')
 
-token_login = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpZCI6MSwiZW1haWwiOiJ0ZXN0IiwidmVyaWZpZWQiOnRydWUsImFkbWluIjp0cnVlfQ.ADtLcJ2cwnMyQRxI4gxQC-lJziEbMrcVia6OoFoYsKQ"
-token_signup = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpZCI6bnVsbCwiZW1haWwiOiJ0ZXN0MSIsInZlcmlmaWVkIjpmYWxzZSwiYWRtaW4iOmZhbHNlfQ.1Z6EZdfinbNy8eeXfObKAR0r_hlldtV82vowqjso8xE"
+filters = [
+    {"authors": [{"name": "Bram Stoker"}, {"name": "F. Scott Fitzgerald"}, {"name": "Friedrich Nietzsche"}, {"name": "Hans Rosling"}, {"name": "Haruki Murakami"},
+                    {"name": "J.K. Rowling"}, {"name": "Jane Austen"}, {"name": "Louisa May Alcott"}, {"name": "Mark Manson"}, {"name": "Mary Shelley"}, 
+                    {"name": "Oscar Wilde"}, {"name": "Yuval Noah Harari"} ]
+    }, 
+    {"year_span": [1816, 1818, 1868, 1897, 2004, 2005, 2013, 2014, 2015, 2016, 2017, 2018, 2019]}, 
+    {"genres": [{"name": "Drama"}, {"name": "Romance"}, {"name": "Horror"}, {"name": "Sci-fi"}, {"name": "Comedy"}, {"name": "Thriller"}, {"name": "Detective"}, 
+                    {"name": "Fiction"}, {"name": "Children's book"}, {"name": "Biography"}, {"name": "Non-fiction"}, {"name": "Self-help"}, {"name": "Fantasy"}]}
+    ]
 
 class TestLogin(unittest.TestCase):       
     def test_successfull_login(self):
         with boddle(body="{\"email\": \"test\", \"password\": \"test\"}"):
-            self.assertEqual(app.login(), {'token': token_login})
+            token_payload = jwt.decode(app.login()['token'], secret, algorithms=['HS256'])
+            self.assertEqual(token_payload['email'], 'test')
+            self.assertEqual(token_payload['id'], 1)
+            self.assertEqual(token_payload['admin'], 1)
 
     def test_wrong_password(self):
         with boddle(body="{\"email\": \"test\", \"password\": \"test1\"}"):
@@ -56,16 +69,20 @@ class TestLeaveReviews(unittest.TestCase):
 
 class TestFilters(unittest.TestCase):
     def test_get_filters(self):
-        self.assertEqual(json.loads(app.filters()), [{"authors": [{"name": "Jane Austen"}, {"name": "Louisa May Alcott"}, {"name": "F. Scott Fitzgerald"}, {"name": "Friedrich Nietzsche"}, {"name": "Yuval Noah Harari"}, {"name": "Mark Manson"}, {"name": "Hans Rosling"}, {"name": "Haruki Murakami"}, {"name": "J.K. Rowling"}, {"name": "Bram Stoker"}, {"name": "Oscar Wilde"}, {"name": "F. Scott Fitzgerald"}, {"name": "Haruki Murakami"}, {"name": "Mary Shelley"}, {"name": "Haruki Murakami"}]}, {"year_span": [1816, 1818, 1868, 1897, 2004, 2005, 2013, 2014, 2015, 2016, 2017, 2018, 2019]}, {"genres": [{"name": "Drama"}, {"name": "Romance"}, {"name": "Horror"}, {"name": "Sci-fi"}, {"name": "Comedy"}, {"name": "Thriller"}, {"name": "Detective"}, {"name": "Fiction"}, {"name": "Children's book"}, {"name": "Biography"}, {"name": "Non-fiction"}, {"name": "Self-help"}, {"name": "Fantasy"}]}])
+        self.assertEqual(json.loads(app.filters()), filters)
 
 
 class Test_Invoice(unittest.TestCase):
-    # def test_invoice(self):
-    #     with boddle(body="{\"user_id\": 1, \"date\": \"2022-04-27\", \"total_price\": 1000, \"books\": [{\"id\": 1, \"subs_id\": 1, \"init_date\": \"2022-04-27\", \"exp_date\": \"2022-04-28\"}]}"):
-    #         self.assertEqual(app.invoice(), 'success')
+
+    def setUp(self):
+        self.token = jwt.encode({'id': 1, 'email': "test", 'verified': 1, 'admin': 1, "iat" : datetime.utcnow(), "exp" : datetime.utcnow() + timedelta(hours=2)}, secret, algorithm='HS256')
+    def test_invoice(self):
+        with boddle(body="{\"user_id\": 1, \"user_email\": \"test\", \"date\": \"2022-04-27\", \"total_price\": 1000, \"books\": [{\"id\": 6, \"subs_id\": 1, \"init_date\": \"2022-04-27\", \"exp_date\": 30}]}", headers={'Authorization': f'Bearer {self.token}'}):
+            self.assertEqual(app.invoice(), 'success')
 
     def test_invoice_wrong(self):
-        self.assertEqual(app.invoice(), 'error')
+        with boddle(headers={'Authorization': f'Bearer {self.token}'}):
+            self.assertEqual(app.invoice(), 'error')
 
 
 if __name__ == '__main__':

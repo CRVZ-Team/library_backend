@@ -2,6 +2,9 @@ import os
 import jwt
 from bottle import abort, request, response
 
+from dotenv import load_dotenv
+load_dotenv()
+
 secret = os.environ.get('JWT_SECRET')
 
 #Handle validation of JWT token
@@ -58,7 +61,7 @@ class EnableCors(object):
 
         return _enable_cors
     
-    
+
 #Handle CSRF token
 # csrf_token = str_random(32)
 
