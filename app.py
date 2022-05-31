@@ -1,25 +1,23 @@
-from contextlib import nullcontext
 import os
-import re
-from tabnanny import check
-from tkinter import E
 import jwt
 import json
 import bcrypt
-import decimal
+import bottle
 from datetime import datetime, timedelta
 from uuid import uuid4
 from utilities import *
+from security import *
 from bottle.ext import sqlalchemy
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-from bottle import get, install, post, put, route, run, template, request, response, static_file, redirect
-import bottle
-from db import User, Book, Subscription, BookGenre, UserBook, Review, Coeficient, Genre, Invoice, InvoiceBook
+from bottle import request, response, abort
+from db import User, Book, BookGenre, UserBook, Review, Coeficient, Genre, Invoice, InvoiceBook
 
 from dotenv import load_dotenv
 load_dotenv()
+
+secret = os.environ.get('JWT_SECRET')
 
 Base = declarative_base()
 
@@ -38,87 +36,13 @@ plugin = sqlalchemy.Plugin(
     use_kwargs=False
 )
 
+
 app.install(plugin)
-
-
-def default_json(t):
-    if type(t) == decimal.Decimal:
-        return "{:.2f}".format(t)
-    return f'{t}'
-
-# Handle CORS policy for the frontend
-
-
-class EnableCors(object):
-    name = 'enable_cors'
-    api = 2
-
-    def apply(self, fn, context):
-        def _enable_cors(*args, **kwargs):
-            # set CORS headers
-            response.headers['Access-Control-Allow-Origin'] = 'http://localhost:3000'
-            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, OPTIONS'
-            response.headers['Access-Control-Allow-Headers'] = 'Origin, Accept, Content-Type, X-Requested-With, X-CSRF-Token, Authorization'
-
-            if request.method != 'OPTIONS':
-                # actual request; reply with the actual response
-                return fn(*args, **kwargs)
-
-        return _enable_cors
-
-
 app.install(EnableCors())
 
-secret = os.environ.get('JWT_SECRET')
-csrf_token = str_random(32)
-
-
-
-# def csrf_protect():
-#     if request.method == "POST":
-#         token = session.pop('_csrf_token', None)
-#         if not token or token != request.form.get('_csrf_token'):
-#             response.status = 403
-#             return response
-
-# def generate_csrf_token():
-#     if '_csrf_token' not in session:
-#         session['_csrf_token'] = csrf_token
-#     return session['_csrf_token']
-
-
-class AuthorizationError(Exception):
-    """ A base class for exceptions used by bottle. """
-    pass
-
-def jwt_token_from_header():
-    auth = request.headers.get('Authorization', None)
-    print(auth)
-    if not auth:
-        raise AuthorizationError({'code': 'authorization_header_missing', 'description': 'Authorization header is expected'})
- 
-    parts = auth.split()
- 
-    if parts[0].lower() != 'bearer':
-        raise AuthorizationError({'code': 'invalid_header', 'description': 'Authorization header must start with Bearer'})
-    elif len(parts) == 1 or len(parts) > 2:
-        raise AuthorizationError({'code': 'invalid_header', 'description': 'Authorization header must be Bearer token'})
-    return parts[1]
-
-def requires_auth(f):
-    def decorated(*args, **kwargs):
-        try:
-            token = jwt_token_from_header()
-        except AuthorizationError:
-            bottle.abort(401, 'Unauthorized')
- 
-        try:
-            token_decoded = jwt.decode(token, secret, algorithms=['HS256']) 
-        except Exception:
-            bottle.abort(401, 'Invalid token')
-        return f(*args, **kwargs)
- 
-    return decorated
+###############################################################################
+#ROUTES
+###############################################################################
 
 # LOGIN
 @app.route('/api/login', method=['OPTIONS', 'POST'])
@@ -142,7 +66,6 @@ def login():
             response.status = 401
             return {'error': 'Invalid credentials'}
 
-        # add more variables token
         token = jwt.encode({'id': user.id, 'email': user.email, 'verified': user.is_verified,
                            'admin': user.is_admin, "iat" : datetime.utcnow(), "exp" : datetime.utcnow() + timedelta(hours=2)}, secret, algorithm='HS256')
         if not token:
@@ -159,9 +82,8 @@ def login():
     finally:
         session.close()
 
+
 # Sign up
-
-
 @app.route('/api/signup', method=['OPTIONS', 'POST'])
 def signup():
     try:
@@ -186,7 +108,6 @@ def signup():
 
             send_email(email, 'verify', verificationString=verificationString)
 
-        # add more variables token
         token = jwt.encode({'id': user.id, 'email': user.email, 'verified': user.is_verified,
                            'admin': user.is_admin}, secret, algorithm='HS256')
         response.status = 200
@@ -340,9 +261,8 @@ def book(id):
     finally:
         session.close()
 
+
 # Route for getting the books
-
-
 @app.route('/api/books', method=['OPTIONS', 'GET'])
 def books():
     try:
@@ -360,95 +280,7 @@ def books():
     finally:
         session.close()
 
-
-# FEATURE for ADMIN (add book)
-@app.route('/api/books', method=['OPTIONS', 'POST'])
-def _():
-    try:
-        payload = json.loads(request.body.read())
-        title = payload['title']
-        author = payload['author']
-        description = payload['description']
-        image_url = payload['image_url']
-        price = payload['price']
-        genres = payload['genres']
-
-        session = create_session()
-        book = Book(title, author, description, image_url, price)
-        # genres
-
-        session.add(book)
-        session.commit()
-
-        response.status = 201
-        return response
-    except Exception as e:
-        response.status = 500
-        return {'message': 'Error creating book'}
-    finally:
-        session.close()
-
-# FEATURE for ADMIN (delete book)
-
-
-@app.route('/api/books/<id>', method=['OPTIONS', 'DELETE'])
-def _(id):
-    session = create_session()
-
-    book = session.query(Book).filter_by(id=id).first()
-    if not book:
-        response.status = 404
-        return response
-
-    session.delete(book)
-    session.commit()
-
-    response.status = 200
-    return response
-
-
-@app.route('/api/books/<id>', method=['OPTIONS', 'PUT'])
-def _(id):
-    try:
-        session = create_session()
-
-        payload = json.loads(request.body.read())
-        title = payload['title']
-        author = payload['author']
-        description = payload['description']
-        image_url = payload['image_url']
-
-        book = session.query(Book).filter_by(id=id).first()
-        if not book:
-            response.status = 404
-            return response
-
-        book.title = title
-        book.author = author
-        book.description = description
-        book.image_url = image_url
-
-        session.commit()
-        response.status = 200
-        return response
-
-    except Exception as e:
-        response.status = 500
-        return {'message': 'Error updating book'}
-
-
-#
-@app.route('/api/users/<id>', method=['OPTIONS', 'GET'])
-def _(id):
-    session = create_session()
-    user = session.query(User).filter_by(id=id).first()
-    if not user:
-        response.status = 404
-        return response
-    response.status = 200
-    return user.to_dict()
-
-
+    
 # Reviews and comments for the book
 @app.route('/api/comment', method=['OPTIONS', 'POST'])
 def review():
@@ -484,7 +316,6 @@ def filters():
 
         # query authors
         authors_data = session.query(Book).all()
-        #authors = [{'name': book.author} for book in authors_data]
         for book in authors_data:
             if book.author not in check_up:
                 check_up.append(book.author)
@@ -493,11 +324,6 @@ def filters():
         #sort authors
         authors = sorted(authors, key=lambda k: k['name'])
 
-    # query year span
-    # max_year = session.query(func.max(Book.year)).first()[0]
-    # min_year = session.query(func.min(Book.year)).first()[0]
-
-    # year_span = [{"max": max_year, "min": min_year}]
         years = []
         years_data = session.query(Book).all()
         for book in years_data:
@@ -506,23 +332,25 @@ def filters():
 
         years.sort()
 
-        print(years)
-
         # query genres
         genres_data = session.query(Genre).all()
         genres = [{'name': genre.type} for genre in genres_data]
 
         # create general dict
         data = [{"authors": authors}, {"year_span": years}, {"genres": genres}]
+
         response.status = 200
         return json.dumps(data, default=default_json)
+
     except Exception as e:
         response.status = 500
         return response
+
     finally:
         session.close()
 
 
+# Route for filterring the books by author, years, genres
 @app.route('/api/filter/books', method=['OPTIONS', 'POST'])
 def filter_books():
     try:
@@ -531,8 +359,6 @@ def filter_books():
         authors = payload['authors']
         years = payload['years']
         genres = payload['genres']
-
-        print(authors, years, genres)
 
         # query books
         if len(genres) != 0:
@@ -543,7 +369,6 @@ def filter_books():
             books_ids = []
 
         books_data = []
-        print(books_ids)
 
         if len(authors) != 0 and len(years) != 0 and len(books_ids) != 0:
             books_data = session.query(Book).filter(Book.author.in_(authors)).filter(
@@ -568,19 +393,17 @@ def filter_books():
         else:
             books_data = session.query(Book).all()
 
-        print(books_data)
-
         return json.dumps([book.to_dict() for book in books_data], default=default_json)
+
     except Exception as e:
-        print(e)
         response.status = 500
         return response
+
     finally:
         session.close()
 
 
-# Handle payment
-
+# Handle payment and register the invoice + send email
 @app.route('/api/invoice', method=['OPTIONS', 'POST'])
 @requires_auth
 def invoice():
@@ -597,6 +420,7 @@ def invoice():
 
         invoice_book = []
         user_book = []
+
         # TRANSACTION
         with session.begin():
 
@@ -624,13 +448,14 @@ def invoice():
         return "success"
 
     except Exception as e:
-        print(e)
         response.status = 500
         return 'error'
+
     finally:
         session.close()
 
 
+#Route for getting the subscribed books of the user
 @app.route('/api/yourbooks/<id>', method=['OPTIONS', 'GET'])
 @requires_auth
 def _(id):
@@ -647,13 +472,115 @@ def _(id):
             books[-1]['exp_date'] = exp_date.split(' ')[0]
         response.status = 200
         return json.dumps(books, default=default_json)
+
     except Exception as e:
-        print(e)
         response.status = 500
         return response
+
     finally:
         session.close()
 
+
+###############################################################################################
+#NOT IMPLEMENTED IN THE FRONTEND YET
+
+# FEATURE for ADMIN (add book) 
+@app.route('/api/books', method=['OPTIONS', 'POST'])
+def _():
+    try:
+        payload = json.loads(request.body.read())
+        title = payload['title']
+        author = payload['author']
+        description = payload['description']
+        image_url = payload['image_url']
+        price = payload['price']
+        genres = payload['genres']
+
+        session = create_session()
+        book = Book(title, author, description, image_url, price)
+        
+        #genres
+
+        session.add(book)
+        session.commit()
+
+        response.status = 201
+        return response
+
+    except Exception as e:
+        response.status = 500
+        return {'message': 'Error creating book'}
+
+    finally:
+        session.close()
+
+
+# FEATURE for ADMIN (delete book)
+@app.route('/api/books/<id>', method=['OPTIONS', 'DELETE'])
+def _(id):
+    session = create_session()
+
+    book = session.query(Book).filter_by(id=id).first()
+    if not book:
+        response.status = 404
+        return response
+
+    session.delete(book)
+    session.commit()
+
+    response.status = 200
+    return response
+
+# FEATURE for ADMIN (edit book)
+@app.route('/api/books/<id>', method=['OPTIONS', 'PUT'])
+def _(id):
+    try:
+        session = create_session()
+
+        payload = json.loads(request.body.read())
+        title = payload['title']
+        author = payload['author']
+        description = payload['description']
+        image_url = payload['image_url']
+
+        book = session.query(Book).filter_by(id=id).first()
+        if not book:
+            response.status = 404
+            return response
+
+        book.title = title
+        book.author = author
+        book.description = description
+        book.image_url = image_url
+
+        session.commit()
+        response.status = 200
+        return response
+
+    except Exception as e:
+        response.status = 500
+        return {'message': 'Error updating book'}
+
+
+#FEATURE for ADMIN (query users)
+@app.route('/api/users', method=['OPTIONS', 'GET'])
+def _(id):
+    try:
+        session = create_session()
+
+        users = session.query(User).all()
+
+        response.status = 200
+        return json.dumps([user.to_dict() for user in users], default=default_json)
+
+    except Exception as e:
+        response.status = 500
+        return response
+
+    finally:
+        session.close()
+
+#######################################################################################################
 
 if __name__ == '__main__':
     if os.environ.get('APP_LOCATION') == 'heroku':

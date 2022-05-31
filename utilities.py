@@ -1,9 +1,10 @@
+import os
+import decimal
+from string import ascii_letters, digits
 from datetime import datetime
+from random import choice
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
-import os
-from string import ascii_letters, digits
-from random import choice
 
 
 def send_email(email, type, invoice=None, verificationString=None):
@@ -45,3 +46,8 @@ def str_random(length):
     '''Generate a random string using range [a-zA-Z0-9].'''
     chars = ascii_letters + digits
     return ''.join([choice(chars) for i in range(length)])
+
+def default_json(t):
+    if type(t) == decimal.Decimal:
+        return "{:.2f}".format(t)
+    return f'{t}'
