@@ -1,0 +1,8 @@
+Include
+Scripts
+Lib
+__pycache__
+.env
+pyvenv.cfg
+
+.gitignore

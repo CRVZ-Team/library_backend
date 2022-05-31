@@ -1,6 +1,8 @@
 from contextlib import nullcontext
 import os
+import re
 from tabnanny import check
+from tkinter import E
 import jwt
 import json
 import bcrypt
@@ -13,7 +15,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from bottle import get, install, post, put, route, run, template, request, response, static_file, redirect
-
+import bottle
 from db import User, Book, Subscription, BookGenre, UserBook, Review, Coeficient, Genre, Invoice, InvoiceBook
 
 from dotenv import load_dotenv
@@ -23,6 +25,8 @@ Base = declarative_base()
 
 engine = create_engine(os.getenv("DATABASE_URL"))
 create_session = sessionmaker(bind=engine)
+
+app = bottle.Bottle()
 
 # Create the SQLAlchemy pluggin connected to the database
 plugin = sqlalchemy.Plugin(
@@ -34,7 +38,7 @@ plugin = sqlalchemy.Plugin(
     use_kwargs=False
 )
 
-install(plugin)
+app.install(plugin)
 
 
 def default_json(t):
@@ -54,7 +58,7 @@ class EnableCors(object):
             # set CORS headers
             response.headers['Access-Control-Allow-Origin'] = 'http://localhost:3000'
             response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, OPTIONS'
-            response.headers['Access-Control-Allow-Headers'] = 'Origin, Accept, Content-Type, X-Requested-With, X-CSRF-Token'
+            response.headers['Access-Control-Allow-Headers'] = 'Origin, Accept, Content-Type, X-Requested-With, X-CSRF-Token, Authorization'
 
             if request.method != 'OPTIONS':
                 # actual request; reply with the actual response
@@ -63,13 +67,61 @@ class EnableCors(object):
         return _enable_cors
 
 
-install(EnableCors())
+app.install(EnableCors())
 
 secret = os.environ.get('JWT_SECRET')
+csrf_token = str_random(32)
 
+
+
+# def csrf_protect():
+#     if request.method == "POST":
+#         token = session.pop('_csrf_token', None)
+#         if not token or token != request.form.get('_csrf_token'):
+#             response.status = 403
+#             return response
+
+# def generate_csrf_token():
+#     if '_csrf_token' not in session:
+#         session['_csrf_token'] = csrf_token
+#     return session['_csrf_token']
+
+
+class AuthorizationError(Exception):
+    """ A base class for exceptions used by bottle. """
+    pass
+
+def jwt_token_from_header():
+    auth = request.headers.get('Authorization', None)
+    print(auth)
+    if not auth:
+        raise AuthorizationError({'code': 'authorization_header_missing', 'description': 'Authorization header is expected'})
+ 
+    parts = auth.split()
+ 
+    if parts[0].lower() != 'bearer':
+        raise AuthorizationError({'code': 'invalid_header', 'description': 'Authorization header must start with Bearer'})
+    elif len(parts) == 1 or len(parts) > 2:
+        raise AuthorizationError({'code': 'invalid_header', 'description': 'Authorization header must be Bearer token'})
+    return parts[1]
+
+def requires_auth(f):
+    def decorated(*args, **kwargs):
+        try:
+            token = jwt_token_from_header()
+        except AuthorizationError:
+            bottle.abort(401, 'Unauthorized')
+ 
+        try:
+            token_decoded = jwt.decode(token, secret, algorithms=['HS256']) 
+        except Exception:
+            bottle.abort(401, 'Invalid token')
+        return f(*args, **kwargs)
+ 
+    return decorated
 
 # LOGIN
-@route('/api/login', method=['OPTIONS', 'POST'])
+@app.route('/api/login', method=['OPTIONS', 'POST'])
 def login():
     try:
         session = create_session()
@@ -92,7 +144,7 @@ def login():
 
         # add more variables token
         token = jwt.encode({'id': user.id, 'email': user.email, 'verified': user.is_verified,
-                           'admin': user.is_admin}, secret, algorithm='HS256')
+                           'admin': user.is_admin, "iat" : datetime.utcnow(), "exp" : datetime.utcnow() + timedelta(hours=2)}, secret, algorithm='HS256')
         if not token:
             response.status = 401
             return response
@@ -110,7 +162,7 @@ def login():
 # Sign up
 
 
-@route('/api/signup', method=['OPTIONS', 'POST'])
+@app.route('/api/signup', method=['OPTIONS', 'POST'])
 def signup():
     try:
         session = create_session()
@@ -149,7 +201,7 @@ def signup():
 
 
 # Verify email
-@route('/api/verify-email', method=['OPTIONS', 'PUT'])
+@app.route('/api/verify-email', method=['OPTIONS', 'PUT'])
 def _():
     try:
         session = create_session()
@@ -176,6 +228,7 @@ def _():
             return response
 
         response.status = 200
+        response.headers['Authorization'] = token
         return {'token': token}
 
     except Exception as e:
@@ -187,7 +240,7 @@ def _():
 
 
 # Reset the password
-@route('/api/users/<passwordResetCode>/reset-password', method=['OPTIONS', 'PUT'])
+@app.route('/api/users/<passwordResetCode>/reset-password', method=['OPTIONS', 'PUT'])
 def _(passwordResetCode):
     try:
         session = create_session()
@@ -218,7 +271,7 @@ def _(passwordResetCode):
 
 
 # Forgot password
-@route('/api/forgot-password/<email>', method=['OPTIONS', 'PUT'])
+@app.route('/api/forgot-password/<email>', method=['OPTIONS', 'PUT'])
 def _(email):
     try:
         session = create_session()
@@ -246,7 +299,7 @@ def _(email):
 
 
 # Single book page
-@route('/api/book/<id>', method=['OPTIONS', 'GET'])
+@app.route('/api/book/<id>', method=['OPTIONS', 'GET'])
 def book(id):
     try:
         session = create_session()
@@ -290,7 +343,7 @@ def book(id):
 # Route for getting the books
 
 
-@route('/api/books', method=['OPTIONS', 'GET'])
+@app.route('/api/books', method=['OPTIONS', 'GET'])
 def books():
     try:
         session = create_session()
@@ -309,7 +362,7 @@ def books():
 
 
 # FEATURE for ADMIN (add book)
-@route('/api/books', method=['OPTIONS', 'POST'])
+@app.route('/api/books', method=['OPTIONS', 'POST'])
 def _():
     try:
         payload = json.loads(request.body.read())
@@ -338,7 +391,7 @@ def _():
 # FEATURE for ADMIN (delete book)
 
 
-@route('/api/books/<id>', method=['OPTIONS', 'DELETE'])
+@app.route('/api/books/<id>', method=['OPTIONS', 'DELETE'])
 def _(id):
     session = create_session()
 
@@ -354,7 +407,7 @@ def _(id):
     return response
 
 
-@route('/api/books/<id>', method=['OPTIONS', 'PUT'])
+@app.route('/api/books/<id>', method=['OPTIONS', 'PUT'])
 def _(id):
     try:
         session = create_session()
@@ -385,7 +438,7 @@ def _(id):
 
 
 #
-@route('/api/users/<id>', method=['OPTIONS', 'GET'])
+@app.route('/api/users/<id>', method=['OPTIONS', 'GET'])
 def _(id):
     session = create_session()
     user = session.query(User).filter_by(id=id).first()
@@ -397,7 +450,7 @@ def _(id):
 
 
 # Reviews and comments for the book
-@route('/api/comment', method=['OPTIONS', 'POST'])
+@app.route('/api/comment', method=['OPTIONS', 'POST'])
 def review():
     try:
         session = create_session()
@@ -422,7 +475,7 @@ def review():
 
 
 # Filters for the books
-@route('/api/filters/authors', method=['OPTIONS', 'GET'])
+@app.route('/api/filters/authors', method=['OPTIONS', 'GET'])
 def filters():
     try:
         session = create_session()
@@ -470,7 +523,7 @@ def filters():
         session.close()
 
 
-@route('/api/filter/books', method=['OPTIONS', 'POST'])
+@app.route('/api/filter/books', method=['OPTIONS', 'POST'])
 def filter_books():
     try:
         session = create_session()
@@ -527,7 +580,9 @@ def filter_books():
 
 
 # Handle payment
-@route('/api/invoice', method=['OPTIONS', 'POST'])
+
+@app.route('/api/invoice', method=['OPTIONS', 'POST'])
+@requires_auth
 def invoice():
     try:
         session = create_session()
@@ -576,7 +631,8 @@ def invoice():
         session.close()
 
 
-@route('/api/yourbooks/<id>', method=['OPTIONS', 'GET'])
+@app.route('/api/yourbooks/<id>', method=['OPTIONS', 'GET'])
+@requires_auth
 def _(id):
     try:
         session = create_session()
@@ -601,7 +657,7 @@ def _(id):
 
 if __name__ == '__main__':
     if os.environ.get('APP_LOCATION') == 'heroku':
-        run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+        app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
     else:
-        run(host='localhost', port=8080, debug=True,
+        app.run(host='localhost', port=8080, debug=True,
             reloader=True, server='paste')

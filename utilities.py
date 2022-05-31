@@ -2,6 +2,8 @@ from datetime import datetime
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
 import os
+from string import ascii_letters, digits
+from random import choice
 
 
 def send_email(email, type, invoice=None, verificationString=None):
@@ -38,3 +40,8 @@ def send_email(email, type, invoice=None, verificationString=None):
 
     except Exception as e:
         print(e)
+
+def str_random(length):
+    '''Generate a random string using range [a-zA-Z0-9].'''
+    chars = ascii_letters + digits
+    return ''.join([choice(chars) for i in range(length)])
