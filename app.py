@@ -410,11 +410,13 @@ def invoice():
     try:
         session = create_session()
         payload = json.loads(request.body.read())
-        user_id = int(payload['user_id'])
         user_email = payload['user_email']
         date = datetime.now()
         total_price = payload['total_price']
         books = payload['books']
+
+        token = jwt_token_from_header()
+        user_id = jwt.decode(token, secret, algorithms=['HS256'])['id']
 
         invoice = Invoice(user_id=user_id, date=date, total_price=total_price)
 
