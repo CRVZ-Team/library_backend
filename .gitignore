@@ -2,7 +2,7 @@ Include
 Lib
 Scripts
 pyvenv.cfg
-
+.dockerignore
 
 __pycache__
 
