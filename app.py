@@ -283,6 +283,7 @@ def books():
     
 # Reviews and comments for the book
 @app.route('/api/comment', method=['OPTIONS', 'POST'])
+@requires_auth
 def review():
     try:
         session = create_session()
